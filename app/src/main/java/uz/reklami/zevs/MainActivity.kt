@@ -31,6 +31,9 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 
 private val Night = Color(0xFF080611)
 private val Panel = Color(0xFF171126)
@@ -50,6 +53,9 @@ class MainActivity : ComponentActivity() {
 fun ZevsApp() {
     var protection by remember { mutableStateOf(false) }
     val context = androidx.compose.ui.platform.LocalContext.current
+    val scope = rememberCoroutineScope()
+    var wgConnected by remember { mutableStateOf(false) }
+    var wgBusy by remember { mutableStateOf(false) }
     val vpnConsent = androidx.activity.compose.rememberLauncherForActivityResult(
         androidx.activity.result.contract.ActivityResultContracts.StartActivityForResult()
     ) { result ->
@@ -59,6 +65,10 @@ fun ZevsApp() {
         }
     }
     fun setProtection(enabled: Boolean) {
+        if (enabled && wgConnected) {
+            Toast.makeText(context, "При активном WireGuard блокировка DNS уже работает через AdGuard DNS.", Toast.LENGTH_LONG).show()
+            return
+        }
         if (enabled) {
             val consent = VpnService.prepare(context)
             if (consent != null) vpnConsent.launch(consent)
@@ -71,7 +81,6 @@ fun ZevsApp() {
             protection = false
         }
     }
-    var vpn by remember { mutableStateOf(false) }
     var tab by remember { mutableIntStateOf(0) }
     var importedProfile by remember { mutableStateOf<String?>(null) }
     var profileValid by remember { mutableStateOf(false) }
@@ -81,18 +90,58 @@ fun ZevsApp() {
                 context.contentResolver.openInputStream(uri)?.bufferedReader()?.use { it.readText() }
                     ?: error("Не удалось прочитать файл")
             }.onSuccess { config ->
-                val valid = config.contains("[Interface]") &&
-                    config.contains("[Peer]") &&
-                    config.contains(Regex("(?m)^\\s*PrivateKey\\s*=")) &&
-                    config.contains(Regex("(?m)^\\s*PublicKey\\s*=")) &&
-                    config.contains(Regex("(?m)^\\s*Endpoint\\s*="))
-                profileValid = valid
-                importedProfile = if (valid) (uri.lastPathSegment?.substringAfterLast('/') ?: "WireGuard-профиль") else null
-                Toast.makeText(context, if (valid) "Конфигурация проверена. Туннель пока не активирован." else "Файл не похож на полный WireGuard-профиль.", Toast.LENGTH_LONG).show()
+                WireGuardController.validate(config)
+                context.getSharedPreferences("zevs", android.content.Context.MODE_PRIVATE)
+                    .edit().putString("wg_profile", config).apply()
+                profileValid = true
+                importedProfile = uri.lastPathSegment?.substringAfterLast('/') ?: "WireGuard-профиль"
+                Toast.makeText(context, "WireGuard-профиль импортирован и сохранён.", Toast.LENGTH_LONG).show()
             }.onFailure {
                 profileValid = false
                 importedProfile = null
                 Toast.makeText(context, "Не удалось прочитать конфигурацию.", Toast.LENGTH_LONG).show()
+            }
+        }
+    }
+
+    fun setWireGuard(enabled: Boolean) {
+        if (wgBusy) return
+        if (enabled) {
+            val profile = context.getSharedPreferences("zevs", android.content.Context.MODE_PRIVATE)
+                .getString("wg_profile", null)
+            if (profile.isNullOrBlank()) {
+                Toast.makeText(context, "Сначала импортируй WireGuard .conf", Toast.LENGTH_LONG).show()
+                return
+            }
+            if (protection) {
+                context.startService(Intent(context, DnsFilterVpnService::class.java).setAction(DnsFilterVpnService.ACTION_STOP))
+                protection = false
+            }
+            wgBusy = true
+            scope.launch {
+                val result = runCatching {
+                    withContext(Dispatchers.IO) { WireGuardController.connect(context, profile, true) }
+                }
+                wgBusy = false
+                result.onSuccess {
+                    wgConnected = true
+                    Toast.makeText(context, "WireGuard подключён. DNS-фильтрация AdGuard включена.", Toast.LENGTH_LONG).show()
+                }.onFailure {
+                    wgConnected = false
+                    Toast.makeText(context, "Ошибка VPN: ${it.message ?: "не удалось подключиться"}", Toast.LENGTH_LONG).show()
+                }
+            }
+        } else {
+            wgBusy = true
+            scope.launch {
+                val result = runCatching { withContext(Dispatchers.IO) { WireGuardController.disconnect() } }
+                wgBusy = false
+                result.onSuccess {
+                    wgConnected = false
+                    Toast.makeText(context, "WireGuard отключён.", Toast.LENGTH_SHORT).show()
+                }.onFailure {
+                    Toast.makeText(context, "Ошибка отключения: ${it.message}", Toast.LENGTH_LONG).show()
+                }
             }
         }
     }
@@ -110,21 +159,21 @@ fun ZevsApp() {
                 verticalArrangement = Arrangement.spacedBy(16.dp)
             ) {
                 item { Header() }
-                item { HeroPower(protection) { setProtection(it) } }
+                item { HeroPower(protection || wgConnected) { if (wgConnected) setWireGuard(false) else setProtection(it) } }
                 item { MetricsCard() }
                 item {
                     Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
-                        FeatureToggle("Блокировка рекламы", "DNS-фильтр", protection, { setProtection(it) }, Icons.Rounded.Shield, Modifier.weight(1f))
-                        FeatureToggle("VPN Польша", "WireGuard · позже", vpn, { vpn = it }, Icons.Rounded.FlashOn, Modifier.weight(1f))
+                        FeatureToggle("Блокировка рекламы", if (wgConnected) "AdGuard DNS через VPN" else "DNS-фильтр без VPN", protection || wgConnected, { setProtection(it) }, Icons.Rounded.Shield, Modifier.weight(1f))
+                        FeatureToggle(if (wgBusy) "Подключение…" else "VPN Польша", "WireGuard", wgConnected, { setWireGuard(it) }, Icons.Rounded.FlashOn, Modifier.weight(1f))
                     }
                 }
                 item { QuickCard(Icons.Rounded.FilterAlt, "Фильтры", "Списки рекламы и трекеров", "Настроить") { tab = 1 } }
                 item { QuickCard(Icons.Rounded.QueryStats, "Статистика", "Запросы и приложения", "Открыть") { tab = 2 } }
-                item { WireGuardProfileCard(importedProfile, profileValid) { profilePicker.launch(arrayOf("*/*")) } }
+                item { WireGuardProfileCard(importedProfile, profileValid, wgConnected, wgBusy, { profilePicker.launch(arrayOf("*/*")) }) { setWireGuard(!wgConnected) } }
                 item { TrafficCard() }
                 item {
                     Text(
-                        "ПРЕДВАРИТЕЛЬНАЯ ВЕРСИЯ · СЕТЕВОЙ ДВИЖОК ЕЩЁ НЕ ПОДКЛЮЧЁН",
+                        "WIREGUARD + DNS FILTER · ТЕСТОВАЯ СБОРКА",
                         color = Muted, fontSize = 10.sp, letterSpacing = 1.1.sp,
                         modifier = Modifier.fillMaxWidth().padding(vertical = 8.dp)
                     )
@@ -226,7 +275,7 @@ private fun QuickCard(icon: androidx.compose.ui.graphics.vector.ImageVector, tit
     }
 }
 @Composable
-private fun WireGuardProfileCard(profileName: String?, valid: Boolean, onImport: () -> Unit) {
+private fun WireGuardProfileCard(profileName: String?, valid: Boolean, connected: Boolean, busy: Boolean, onImport: () -> Unit, onConnect: () -> Unit) {
     Column(Modifier.fillMaxWidth().clip(RoundedCornerShape(22.dp))
         .background(Brush.linearGradient(listOf(Color(0xFF251344), Panel)))
         .border(1.dp, Violet.copy(alpha=.4f), RoundedCornerShape(22.dp)).padding(18.dp)) {
@@ -235,7 +284,7 @@ private fun WireGuardProfileCard(profileName: String?, valid: Boolean, onImport:
             Spacer(Modifier.width(12.dp))
             Column(Modifier.weight(1f)) {
                 Text("VPN · Польша", fontWeight = FontWeight.Bold, fontSize = 16.sp)
-                Text(if (valid) "Профиль выбран · готов к подключению после интеграции" else "WireGuard · профиль не добавлен", color = Muted, fontSize = 10.sp)
+                Text(if (connected) "Подключено" else if (valid) "Профиль сохранён · можно подключаться" else "WireGuard · профиль не добавлен", color = if (connected) Cyan else Muted, fontSize = 10.sp)
             }
         }
         Spacer(Modifier.height(12.dp))
@@ -251,7 +300,13 @@ private fun WireGuardProfileCard(profileName: String?, valid: Boolean, onImport:
             Spacer(Modifier.width(8.dp))
             Text(if (valid) "Заменить конфигурацию" else "Импортировать WireGuard")
         }
-        Text("Сейчас выполняется проверка формата файла. Реальное VPN-подключение будет включено после подключения сетевого движка.", color = Muted, fontSize = 9.sp, lineHeight = 14.sp, modifier = Modifier.padding(top = 8.dp))
+        if (valid) {
+            Spacer(Modifier.height(8.dp))
+            Button(onClick = onConnect, enabled = !busy, modifier = Modifier.fillMaxWidth(), colors = ButtonDefaults.buttonColors(containerColor = if (connected) Color(0xFF8A2747) else Color(0xFF247A72))) {
+                Text(if (busy) "Подожди…" else if (connected) "Отключить VPN" else "Подключить VPN и AdBlock")
+            }
+        }
+        Text("Используется официальный WireGuard userspace backend. При подключении DNS переключается на AdGuard DNS для блокировки рекламы и трекеров.", color = Muted, fontSize = 9.sp, lineHeight = 14.sp, modifier = Modifier.padding(top = 8.dp))
     }
 }
 @Composable
