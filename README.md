@@ -15,14 +15,15 @@ Zevs is an Android privacy app with a Russian-language dark dashboard. It uses A
 - AdGuard DNS (94.140.14.14 / 94.140.15.15) can be applied to the WireGuard profile for DNS-based ad/tracker filtering.
 - Per-app split tunneling: if one or more apps are selected, only those packages are included in the VPN; if none are selected, all apps except Zevs use the tunnel.
 - Separate DNS-only protection mode, which leaves non-DNS traffic direct and uses DNS-over-TLS upstreams.
-- DNS-only mode includes a small built-in domain denylist.
+- DNS-only mode includes a built-in denylist plus editable user allow/deny domain lists.
+- DNS-only mode records total DNS queries and blocked queries.
 
 ## Important limitations — not a finished production release yet
 
 - The DNS-only mode currently supports IPv4 UDP DNS; IPv6 and TCP DNS handling are not implemented.
-- The built-in denylist is small. User-editable allow/deny lists and automatic filter-list updates are not yet implemented.
+- The built-in denylist is intentionally small; automatic downloads and updates of large community filter lists are not yet implemented.
 - When WireGuard is active, ad blocking is provided by the selected AdGuard DNS resolver; the custom DNS-only denylist is not injected into the WireGuard tunnel.
-- Traffic counters and app-level usage statistics are still placeholders.
+- DNS-only counters are available; per-app traffic statistics and WireGuard byte counters are not yet implemented.
 - Autostart / always-on recovery and a full reconnect supervisor are not yet implemented.
 - The app has not yet been verified on a physical Samsung Galaxy S20+.
 - GitHub Actions produces a **debug APK** for installation/testing. It is not a signed Play Store release.
