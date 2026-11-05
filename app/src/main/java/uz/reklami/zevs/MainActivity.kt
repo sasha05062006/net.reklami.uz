@@ -2,6 +2,9 @@ package uz.reklami.zevs
 
 import android.os.Bundle
 import android.content.Intent
+import android.net.VpnService
+import androidx.core.content.ContextCompat
+import android.content.Intent
 import android.widget.Toast
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
@@ -47,6 +50,28 @@ class MainActivity : ComponentActivity() {
 @Composable
 fun ZevsApp() {
     var protection by remember { mutableStateOf(false) }
+    val context = androidx.compose.ui.platform.LocalContext.current
+    val vpnConsent = androidx.activity.compose.rememberLauncherForActivityResult(
+        androidx.activity.result.contract.ActivityResultContracts.StartActivityForResult()
+    ) { result ->
+        if (result.resultCode == android.app.Activity.RESULT_OK) {
+            ContextCompat.startForegroundService(context, Intent(context, DnsFilterVpnService::class.java))
+            protection = true
+        }
+    }
+    fun setProtection(enabled: Boolean) {
+        if (enabled) {
+            val consent = VpnService.prepare(context)
+            if (consent != null) vpnConsent.launch(consent)
+            else {
+                ContextCompat.startForegroundService(context, Intent(context, DnsFilterVpnService::class.java))
+                protection = true
+            }
+        } else {
+            context.startService(Intent(context, DnsFilterVpnService::class.java).setAction(DnsFilterVpnService.ACTION_STOP))
+            protection = false
+        }
+    }
     var vpn by remember { mutableStateOf(false) }
     var tab by remember { mutableIntStateOf(0) }
     var importedProfile by remember { mutableStateOf<String?>(null) }
@@ -87,11 +112,11 @@ fun ZevsApp() {
                 verticalArrangement = Arrangement.spacedBy(16.dp)
             ) {
                 item { Header() }
-                item { HeroPower(protection) { protection = it } }
+                item { HeroPower(protection) { setProtection(it) } }
                 item { MetricsCard() }
                 item {
                     Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
-                        FeatureToggle("Блокировка рекламы", "DNS-фильтр", protection, { protection = it }, Icons.Rounded.Shield, Modifier.weight(1f))
+                        FeatureToggle("Блокировка рекламы", "DNS-фильтр", protection, { setProtection(it) }, Icons.Rounded.Shield, Modifier.weight(1f))
                         FeatureToggle("VPN Польша", "WireGuard · позже", vpn, { vpn = it }, Icons.Rounded.FlashOn, Modifier.weight(1f))
                     }
                 }
