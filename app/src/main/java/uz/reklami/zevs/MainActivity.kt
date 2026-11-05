@@ -4,7 +4,6 @@ import android.os.Bundle
 import android.content.Intent
 import android.net.VpnService
 import androidx.core.content.ContextCompat
-import android.content.Intent
 import android.widget.Toast
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
@@ -76,7 +75,6 @@ fun ZevsApp() {
     var tab by remember { mutableIntStateOf(0) }
     var importedProfile by remember { mutableStateOf<String?>(null) }
     var profileValid by remember { mutableStateOf(false) }
-    val context = LocalContext.current
     val profilePicker = rememberLauncherForActivityResult(ActivityResultContracts.OpenDocument()) { uri ->
         if (uri != null) {
             runCatching {
