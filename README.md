@@ -36,3 +36,6 @@ GitHub Actions builds `app-debug.apk` on pushes to `main` and pull requests. Dow
 ## Network architecture
 
 Android allows one active VPN service per user profile. Zevs therefore uses the WireGuard backend for full VPN mode, and a separate DNS-only VPN mode when WireGuard is not connected. Do not start another VPN app at the same time.
+
+
+CI verification commit: this branch is used to validate the debug APK build before release.
