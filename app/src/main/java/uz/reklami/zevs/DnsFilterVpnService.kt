@@ -11,8 +11,10 @@ import android.os.ParcelFileDescriptor
 import androidx.core.app.NotificationCompat
 import java.io.FileInputStream
 import java.io.FileOutputStream
-import java.net.HttpURLConnection
-import java.net.URL
+import java.net.InetSocketAddress
+import javax.net.ssl.SNIHostName
+import javax.net.ssl.SSLSocket
+import javax.net.ssl.SSLSocketFactory
 import java.nio.ByteBuffer
 import java.util.concurrent.Executors
 import java.util.concurrent.atomic.AtomicBoolean
@@ -96,22 +98,46 @@ class DnsFilterVpnService : VpnService() {
     }
 
     private fun queryDoh(query: ByteArray): ByteArray? {
-        var connection: HttpURLConnection? = null
-        return try {
-            connection = URL("https://1.1.1.1/dns-query").openConnection() as HttpURLConnection
-            connection.requestMethod = "POST"
-            connection.connectTimeout = 7000
-            connection.readTimeout = 7000
-            connection.doOutput = true
-            connection.setRequestProperty("Content-Type", "application/dns-message")
-            connection.setRequestProperty("Accept", "application/dns-message")
-            connection.outputStream.use { it.write(query) }
-            if (connection.responseCode != 200) null else connection.inputStream.use { it.readBytes() }
-        } catch (_: Exception) {
-            null
-        } finally {
-            connection?.disconnect()
+        // DNS-over-TLS uses resolver IPs and TLS SNI, avoiding recursive DNS lookups.
+        // Platform certificate validation remains enabled.
+        val endpoints = listOf("1.1.1.1" to "cloudflare-dns.com", "8.8.8.8" to "dns.google")
+        for ((ip, host) in endpoints) {
+            var socket: SSLSocket? = null
+            try {
+                socket = SSLSocketFactory.getDefault().createSocket() as SSLSocket
+                socket.connect(InetSocketAddress(ip, 853), 5000)
+                val params = socket.sslParameters
+                params.serverNames = listOf(SNIHostName(host))
+                params.endpointIdentificationAlgorithm = "HTTPS"
+                socket.sslParameters = params
+                socket.soTimeout = 6000
+                socket.startHandshake()
+                val output = socket.outputStream
+                output.write((query.size ushr 8) and 0xff)
+                output.write(query.size and 0xff)
+                output.write(query)
+                output.flush()
+                val input = socket.inputStream
+                val hi = input.read()
+                val lo = input.read()
+                if (hi < 0 || lo < 0) continue
+                val size = (hi shl 8) or lo
+                if (size !in 12..65535) continue
+                val response = ByteArray(size)
+                var offset = 0
+                while (offset < size) {
+                    val count = input.read(response, offset, size - offset)
+                    if (count < 0) break
+                    offset += count
+                }
+                if (offset == size) return response
+            } catch (_: Exception) {
+                // Try the next public DNS-over-TLS endpoint.
+            } finally {
+                try { socket?.close() } catch (_: Exception) { }
+            }
         }
+        return null
     }
 
     private fun readQuestionName(dns: ByteArray): String? {
