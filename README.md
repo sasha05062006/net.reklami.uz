@@ -1,39 +1,27 @@
-# Zevs — VPN + DNS AdBlock for Android
+# Zevs — WireGuard VPN for Android
 
-**Application ID:** `uz.reklami.zevs`  
-**Target device:** Samsung Galaxy S20+ / Android 13 and newer  
-**Repository:** `sasha05062006/net.reklami.uz`
+Zevs is a focused Android WireGuard client. It imports a provider-supplied .conf file and routes device traffic through that profile.
 
-Zevs is an Android privacy app with a Russian-language dark dashboard. It uses Android's single VPN slot and the official WireGuard Android tunnel library.
+## Current implementation
 
-## Implemented in the current source
+- Official WireGuard Android userspace tunnel backend.
+- Full-device routing: all apps except Zevs itself are routed through the imported profile.
+- The imported profile's DNS settings are preserved. Zevs does not replace DNS with AdGuard or another resolver.
+- Imported profile is encrypted with AES-GCM using a non-exportable Android Keystore key.
+- Live tunnel RX/TX counters from WireGuard backend statistics.
+- Auto-connect after device reboot when enabled in the app.
+- Android Always-on VPN callback support; the user can enable Always-on and lockdown in Android VPN settings.
+- Futuristic Compose interface with animated tunnel visualization.
+- No ad blocker, no DNS interception, no app split-tunneling UI. This is intentionally VPN-only to avoid breaking apps such as ANI X ART.
 
-- Jetpack Compose dashboard and Russian UI.
-- Import and validation of a WireGuard `.conf` profile from Android's document picker.
-- Save the imported profile in app-private storage.
-- WireGuard userspace tunnel start/stop using `com.wireguard.android:tunnel`.
-- AdGuard DNS (94.140.14.14 / 94.140.15.15) can be applied to the WireGuard profile for DNS-based ad/tracker filtering.
-- Per-app split tunneling: if one or more apps are selected, only those packages are included in the VPN; if none are selected, all apps except Zevs use the tunnel.
-- Separate DNS-only protection mode, which leaves non-DNS traffic direct and uses DNS-over-TLS upstreams.
-- DNS-only mode includes a built-in denylist plus editable user allow/deny domain lists.
-- DNS-only mode records total DNS queries and blocked queries.
+## Important requirements and limitations
 
-## Important limitations — not a finished production release yet
-
-- The DNS-only mode currently supports IPv4 UDP DNS; IPv6 and TCP DNS handling are not implemented.
-- The built-in denylist is intentionally small; automatic downloads and updates of large community filter lists are not yet implemented.
-- When WireGuard is active, ad blocking is provided by the selected AdGuard DNS resolver; the custom DNS-only denylist is not injected into the WireGuard tunnel.
-- DNS-only counters are available; per-app traffic statistics and WireGuard byte counters are not yet implemented.
-- Autostart / always-on recovery and a full reconnect supervisor are not yet implemented.
-- The app has not yet been verified on a physical Samsung Galaxy S20+.
-- GitHub Actions produces a **debug APK** for installation/testing. It is not a signed Play Store release.
-
-A valid WireGuard profile and a VPN provider/server are required. Zevs does not include or provide a Poland VPN server.
+- Zevs does not provide VPN servers or free internet. You must import a valid WireGuard profile from a VPN provider or your own server.
+- The provider profile must contain a default route (AllowedIPs = 0.0.0.0/0 or ::/0) for full-tunnel routing. A dual-stack profile should contain both IPv4 and IPv6 default routes if the provider supports IPv6.
+- Auto-connect after reboot depends on Android/Samsung background-start restrictions and the device's battery settings. For the most reliable recovery, enable Android's Always-on VPN for Zevs in system VPN settings. Enable Block connections without VPN only if you want strict lockdown and accept that internet access will stop whenever the tunnel is unavailable.
+- WireGuard's own userspace backend handles network changes and tunnel socket rebinding; the app does not force DNS rewriting or proxy traffic.
+- A debug APK is for testing, not a signed Play Store release.
 
 ## Build
 
-GitHub Actions builds `app-debug.apk` on pushes to `main` and pull requests. Download the `Zevs-debug-apk` artifact from the successful workflow run.
-
-## Network architecture
-
-Android allows one active VPN service per user profile. Zevs therefore uses the WireGuard backend for full VPN mode, and a separate DNS-only VPN mode when WireGuard is not connected. Do not start another VPN app at the same time.
+GitHub Actions builds app-debug.apk with :app:assembleDebug. Download the Zevs-debug-apk artifact from a successful workflow run.
