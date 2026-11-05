@@ -76,8 +76,8 @@ fun ZevsApp() {
         }
     }
     fun setProtection(enabled: Boolean) {
-        if (enabled && wgConnected) {
-            Toast.makeText(context, "При активном WireGuard блокировка DNS уже работает через AdGuard DNS.", Toast.LENGTH_LONG).show()
+        if (wgConnected) {
+            Toast.makeText(context, "При активном WireGuard DNS-фильтрация работает внутри VPN через AdGuard DNS.", Toast.LENGTH_LONG).show()
             return
         }
         if (enabled) {
@@ -127,16 +127,16 @@ fun ZevsApp() {
     fun setWireGuard(enabled: Boolean) {
         if (wgBusy) return
         if (enabled) {
-            val consent = VpnService.prepare(context)
-            if (consent != null) {
-                pendingWireGuard = true
-                vpnConsent.launch(consent)
-                return
-            }
             val profile = context.getSharedPreferences("zevs", android.content.Context.MODE_PRIVATE)
                 .getString("wg_profile", null)
             if (profile.isNullOrBlank()) {
                 Toast.makeText(context, "Сначала импортируй WireGuard .conf", Toast.LENGTH_LONG).show()
+                return
+            }
+            val consent = VpnService.prepare(context)
+            if (consent != null) {
+                pendingWireGuard = true
+                vpnConsent.launch(consent)
                 return
             }
             if (protection) {
