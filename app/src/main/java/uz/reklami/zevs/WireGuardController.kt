@@ -77,8 +77,8 @@ object WireGuardController {
     fun autoConnectEnabled(context: Context): Boolean =
         context.getSharedPreferences(PREFS, Context.MODE_PRIVATE).getBoolean(AUTO_CONNECT, false)
 
-    fun connectSaved(context: Context): Boolean {
-        if (!autoConnectEnabled(context)) return false
+    fun connectSaved(context: Context, force: Boolean = false): Boolean {
+        if (!force && !autoConnectEnabled(context)) return false
         val profile = ProfileVault.load(context) ?: return false
         if (VpnService.prepare(context) != null) return false
         connect(context, profile)
