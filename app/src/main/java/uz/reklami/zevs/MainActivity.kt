@@ -58,12 +58,20 @@ fun ZevsApp() {
     val scope = rememberCoroutineScope()
     var wgConnected by remember { mutableStateOf(false) }
     var wgBusy by remember { mutableStateOf(false) }
+    var pendingWireGuard by remember { mutableStateOf(false) }
     val vpnConsent = androidx.activity.compose.rememberLauncherForActivityResult(
         androidx.activity.result.contract.ActivityResultContracts.StartActivityForResult()
     ) { result ->
         if (result.resultCode == android.app.Activity.RESULT_OK) {
-            ContextCompat.startForegroundService(context, Intent(context, DnsFilterVpnService::class.java))
-            protection = true
+            if (pendingWireGuard) {
+                pendingWireGuard = false
+                setWireGuard(true)
+            } else {
+                ContextCompat.startForegroundService(context, Intent(context, DnsFilterVpnService::class.java))
+                protection = true
+            }
+        } else {
+            pendingWireGuard = false
         }
     }
     fun setProtection(enabled: Boolean) {
@@ -118,6 +126,12 @@ fun ZevsApp() {
     fun setWireGuard(enabled: Boolean) {
         if (wgBusy) return
         if (enabled) {
+            val consent = VpnService.prepare(context)
+            if (consent != null) {
+                pendingWireGuard = true
+                vpnConsent.launch(consent)
+                return
+            }
             val profile = context.getSharedPreferences("zevs", android.content.Context.MODE_PRIVATE)
                 .getString("wg_profile", null)
             if (profile.isNullOrBlank()) {
