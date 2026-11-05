@@ -59,13 +59,14 @@ fun ZevsApp() {
     var wgConnected by remember { mutableStateOf(false) }
     var wgBusy by remember { mutableStateOf(false) }
     var pendingWireGuard by remember { mutableStateOf(false) }
+    var startWireGuardAfterConsent by remember { mutableStateOf(false) }
     val vpnConsent = androidx.activity.compose.rememberLauncherForActivityResult(
         androidx.activity.result.contract.ActivityResultContracts.StartActivityForResult()
     ) { result ->
         if (result.resultCode == android.app.Activity.RESULT_OK) {
             if (pendingWireGuard) {
                 pendingWireGuard = false
-                setWireGuard(true)
+                startWireGuardAfterConsent = true
             } else {
                 ContextCompat.startForegroundService(context, Intent(context, DnsFilterVpnService::class.java))
                 protection = true
@@ -168,6 +169,13 @@ fun ZevsApp() {
                     Toast.makeText(context, "Ошибка отключения: ${it.message}", Toast.LENGTH_LONG).show()
                 }
             }
+        }
+    }
+
+    LaunchedEffect(startWireGuardAfterConsent) {
+        if (startWireGuardAfterConsent) {
+            startWireGuardAfterConsent = false
+            setWireGuard(true)
         }
     }
 
