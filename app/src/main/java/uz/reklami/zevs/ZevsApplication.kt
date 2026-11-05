@@ -7,17 +7,17 @@ class ZevsApplication : Application() {
     override fun onCreate() {
         super.onCreate()
 
-        // Migrate profiles from the previous Zevs build's plain preferences into Android Keystore encryption.
+        // Migrate legacy plaintext profile only after a successful encrypted save.
         val legacy = getSharedPreferences("zevs", MODE_PRIVATE)
         val oldProfile = legacy.getString("wg_profile", null)
         if (oldProfile != null) {
-            if (ProfileVault.load(this) == null) {
-                runCatching {
-                    WireGuardController.validate(oldProfile)
-                    ProfileVault.save(this, oldProfile)
-                }
-            }
-            legacy.edit().clear().apply()
+            val alreadyEncrypted = ProfileVault.load(this) != null
+            val migrated = alreadyEncrypted || runCatching {
+                WireGuardController.validate(oldProfile)
+                ProfileVault.save(this, oldProfile)
+                true
+            }.getOrDefault(false)
+            if (migrated) legacy.edit().clear().apply()
         }
 
         GoBackend.setAlwaysOnCallback {
