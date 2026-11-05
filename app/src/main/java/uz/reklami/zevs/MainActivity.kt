@@ -1,0 +1,221 @@
+package uz.reklami.zevs
+
+import android.os.Bundle
+import androidx.activity.ComponentActivity
+import androidx.activity.compose.setContent
+import androidx.compose.foundation.Canvas
+import androidx.compose.foundation.background
+import androidx.compose.foundation.border
+import androidx.compose.foundation.clickable
+import androidx.compose.foundation.layout.*
+import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.rounded.*
+import androidx.compose.material3.*
+import androidx.compose.runtime.*
+import androidx.compose.ui.Alignment
+import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
+import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.graphics.Brush
+import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
+
+private val Night = Color(0xFF080611)
+private val Panel = Color(0xFF171126)
+private val Violet = Color(0xFF9B42FF)
+private val Pink = Color(0xFFE04CFF)
+private val Muted = Color(0xFFB7A9D5)
+private val Cyan = Color(0xFF4DE7E1)
+
+class MainActivity : ComponentActivity() {
+    override fun onCreate(savedInstanceState: Bundle?) {
+        super.onCreate(savedInstanceState)
+        setContent { ZevsApp() }
+    }
+}
+
+@Composable
+fun ZevsApp() {
+    var protection by remember { mutableStateOf(false) }
+    var vpn by remember { mutableStateOf(false) }
+    var tab by remember { mutableIntStateOf(0) }
+
+    MaterialTheme(colorScheme = darkColorScheme(
+        background = Night, surface = Panel, primary = Violet,
+        secondary = Cyan, onBackground = Color.White, onSurface = Color.White
+    )) {
+        Box(Modifier.fillMaxSize().background(
+            Brush.verticalGradient(listOf(Color(0xFF130B27), Night, Color(0xFF090512)))
+        )) {
+            LazyColumn(
+                modifier = Modifier.fillMaxSize(),
+                contentPadding = PaddingValues(start = 20.dp, end = 20.dp, top = 24.dp, bottom = 110.dp),
+                verticalArrangement = Arrangement.spacedBy(16.dp)
+            ) {
+                item { Header() }
+                item { HeroPower(protection) { protection = it } }
+                item { MetricsCard() }
+                item {
+                    Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+                        FeatureToggle("Блокировка рекламы", "DNS-фильтр", protection, { protection = it }, Icons.Rounded.Shield, Modifier.weight(1f))
+                        FeatureToggle("VPN Польша", "WireGuard · позже", vpn, { vpn = it }, Icons.Rounded.FlashOn, Modifier.weight(1f))
+                    }
+                }
+                item { QuickCard(Icons.Rounded.FilterAlt, "Фильтры", "Списки рекламы и трекеров", "Настроить") { tab = 1 } }
+                item { QuickCard(Icons.Rounded.QueryStats, "Статистика", "Запросы и приложения", "Открыть") { tab = 2 } }
+                item { PolandCard(vpn) { vpn = it } }
+                item { TrafficCard() }
+                item {
+                    Text(
+                        "ПРЕДВАРИТЕЛЬНАЯ ВЕРСИЯ · СЕТЕВОЙ ДВИЖОК ЕЩЁ НЕ ПОДКЛЮЧЁН",
+                        color = Muted, fontSize = 10.sp, letterSpacing = 1.1.sp,
+                        modifier = Modifier.fillMaxWidth().padding(vertical = 8.dp)
+                    )
+                }
+            }
+            BottomBar(tab, { tab = it }, Modifier.align(Alignment.BottomCenter))
+        }
+    }
+}
+
+@Composable
+private fun Header() {
+    Row(verticalAlignment = Alignment.CenterVertically) {
+        Box(
+            Modifier.size(48.dp).clip(RoundedCornerShape(15.dp))
+                .background(Brush.linearGradient(listOf(Violet, Color(0xFF34116B))))
+                .border(1.dp, Pink.copy(alpha = .8f), RoundedCornerShape(15.dp)),
+            contentAlignment = Alignment.Center
+        ) { Text("Z", fontSize = 34.sp, fontWeight = FontWeight.Black, color = Color.White) }
+        Spacer(Modifier.width(12.dp))
+        Column(Modifier.weight(1f)) {
+            Text("Zevs", fontSize = 29.sp, fontWeight = FontWeight.ExtraBold, letterSpacing = 1.sp)
+            Text("Блокирует рекламу. Дарит свободу.", color = Muted, fontSize = 11.sp)
+        }
+        IconButton(onClick = {}) { Icon(Icons.Rounded.NotificationsNone, null, tint = Muted) }
+        IconButton(onClick = {}) { Icon(Icons.Rounded.Settings, null, tint = Muted) }
+    }
+}
+
+@Composable
+private fun HeroPower(enabled: Boolean, onToggle: (Boolean) -> Unit) {
+    Box(
+        Modifier.fillMaxWidth().height(250.dp).clip(RoundedCornerShape(28.dp))
+            .background(Brush.linearGradient(listOf(Color(0xFF28134C), Color(0xFF100B20), Color(0xFF080611))))
+            .border(1.dp, Violet.copy(alpha = .55f), RoundedCornerShape(28.dp))
+    ) {
+        Canvas(Modifier.fillMaxSize()) {
+            drawCircle(Brush.radialGradient(listOf(Violet.copy(alpha = .24f), Color.Transparent)), radius = size.minDimension * .62f, center = Offset(size.width * .76f, size.height * .48f))
+            drawCircle(Violet.copy(alpha = .18f), radius = size.minDimension * .39f, center = Offset(size.width * .76f, size.height * .48f), style = androidx.compose.ui.graphics.drawscope.Stroke(width = 2.dp.toPx()))
+        }
+        Column(Modifier.align(Alignment.CenterStart).padding(start = 22.dp).width(145.dp)) {
+            Text("ЗАЩИТА СЕТИ", color = Cyan, fontSize = 10.sp, letterSpacing = 2.sp, fontWeight = FontWeight.Bold)
+            Spacer(Modifier.height(8.dp))
+            Text("Твоя сеть.\nТвои правила.", fontSize = 23.sp, lineHeight = 27.sp, fontWeight = FontWeight.Bold)
+            Spacer(Modifier.height(8.dp))
+            Text("Управляй рекламой и приватностью", color = Muted, fontSize = 12.sp, lineHeight = 17.sp)
+        }
+        Box(Modifier.align(Alignment.CenterEnd).padding(end = 20.dp).size(148.dp)
+            .clip(CircleShape).background(Brush.radialGradient(listOf(Color(0xFF442078), Color(0xFF120B22))))
+            .border(3.dp, Brush.sweepGradient(listOf(Pink, Violet, Color(0xFF4B1A83), Pink)), CircleShape)
+            .clickable { onToggle(!enabled) }, contentAlignment = Alignment.Center) {
+            Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                Icon(Icons.Rounded.PowerSettingsNew, null, tint = Color.White, modifier = Modifier.size(48.dp))
+                Text(if (enabled) "ВКЛЮЧЕНО" else "ЗАПУСТИТЬ", color = Color.White, fontSize = 12.sp, fontWeight = FontWeight.Bold)
+                Text("Демо-режим", color = Muted, fontSize = 9.sp)
+            }
+        }
+    }
+}
+
+@Composable
+private fun MetricsCard() {
+    Row(Modifier.fillMaxWidth().clip(RoundedCornerShape(22.dp)).background(Panel).border(1.dp, Violet.copy(alpha=.25f), RoundedCornerShape(22.dp)).padding(vertical = 18.dp), horizontalArrangement = Arrangement.SpaceEvenly) {
+        Metric("0", "Заблокировано", Icons.Rounded.Shield)
+        DividerLine()
+        Metric("0", "Приложений", Icons.Rounded.Apps)
+        DividerLine()
+        Metric("0 МБ", "Сэкономлено", Icons.Rounded.Speed)
+    }
+}
+@Composable private fun DividerLine() { Box(Modifier.width(1.dp).height(54.dp).background(Violet.copy(alpha=.35f))) }
+@Composable private fun Metric(value: String, label: String, icon: androidx.compose.ui.graphics.vector.ImageVector) {
+    Column(horizontalAlignment = Alignment.CenterHorizontally) {
+        Icon(icon, null, tint = Cyan, modifier = Modifier.size(22.dp))
+        Text(value, fontSize = 20.sp, fontWeight = FontWeight.Bold)
+        Text(label, fontSize = 10.sp, color = Muted)
+    }
+}
+
+@Composable
+private fun FeatureToggle(title: String, subtitle: String, checked: Boolean, onChecked: (Boolean) -> Unit, icon: androidx.compose.ui.graphics.vector.ImageVector, modifier: Modifier = Modifier) {
+    Column(modifier.clip(RoundedCornerShape(20.dp)).background(Panel).border(1.dp, Violet.copy(alpha=.3f), RoundedCornerShape(20.dp)).padding(13.dp)) {
+        Icon(icon, null, tint = if (checked) Cyan else Violet, modifier = Modifier.size(25.dp))
+        Spacer(Modifier.height(8.dp))
+        Text(title, fontWeight = FontWeight.Bold, fontSize = 13.sp, lineHeight = 16.sp)
+        Text(subtitle, color = Muted, fontSize = 10.sp)
+        Spacer(Modifier.height(8.dp))
+        Switch(checked, onChecked, modifier = Modifier.height(30.dp), colors = SwitchDefaults.colors(checkedThumbColor = Color.White, checkedTrackColor = Violet))
+    }
+}
+@Composable
+private fun QuickCard(icon: androidx.compose.ui.graphics.vector.ImageVector, title: String, subtitle: String, action: String, onClick: () -> Unit) {
+    Row(Modifier.fillMaxWidth().clip(RoundedCornerShape(18.dp)).background(Panel).border(1.dp, Violet.copy(alpha=.25f), RoundedCornerShape(18.dp)).clickable(onClick = onClick).padding(16.dp), verticalAlignment = Alignment.CenterVertically) {
+        Icon(icon, null, tint = Pink, modifier = Modifier.size(30.dp))
+        Spacer(Modifier.width(14.dp))
+        Column(Modifier.weight(1f)) { Text(title, fontWeight = FontWeight.Bold); Text(subtitle, color = Muted, fontSize = 11.sp) }
+        Text(action, color = Cyan, fontSize = 11.sp)
+        Icon(Icons.Rounded.ChevronRight, null, tint = Muted)
+    }
+}
+@Composable
+private fun PolandCard(connected: Boolean, onToggle: (Boolean) -> Unit) {
+    Column(Modifier.fillMaxWidth().clip(RoundedCornerShape(22.dp)).background(Brush.linearGradient(listOf(Color(0xFF251344), Panel))).border(1.dp, Violet.copy(alpha=.4f), RoundedCornerShape(22.dp)).padding(18.dp)) {
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            Text("🇵🇱", fontSize = 30.sp)
+            Spacer(Modifier.width(12.dp))
+            Column(Modifier.weight(1f)) {
+                Text("VPN · Польша", fontWeight = FontWeight.Bold, fontSize = 16.sp)
+                Text(if (connected) "Выбран в интерфейсе · не подключён" else "Отключён", color = Muted, fontSize = 11.sp)
+            }
+            Button(onClick = { onToggle(!connected) }, colors = ButtonDefaults.buttonColors(containerColor = Violet), contentPadding = PaddingValues(horizontal = 14.dp, vertical = 8.dp)) {
+                Text(if (connected) "Снять выбор" else "Выбрать", fontSize = 11.sp)
+            }
+        }
+        Text("Реальный VPN-туннель появится после интеграции WireGuard и импорта конфигурации сервера.", color = Muted, fontSize = 10.sp, lineHeight = 15.sp, modifier = Modifier.padding(top = 12.dp))
+    }
+}
+@Composable
+private fun TrafficCard() {
+    Column(Modifier.fillMaxWidth().clip(RoundedCornerShape(22.dp)).background(Panel).border(1.dp, Violet.copy(alpha=.25f), RoundedCornerShape(22.dp)).padding(16.dp)) {
+        Row(verticalAlignment = Alignment.CenterVertically) { Icon(Icons.Rounded.ShowChart, null, tint = Pink); Spacer(Modifier.width(8.dp)); Text("Сетевой трафик", fontWeight = FontWeight.Bold) }
+        Spacer(Modifier.height(18.dp))
+        Canvas(Modifier.fillMaxWidth().height(65.dp)) {
+            val points = listOf(.82f,.55f,.68f,.32f,.5f,.2f,.47f,.36f,.58f)
+            val path = androidx.compose.ui.graphics.Path()
+            points.forEachIndexed { i, y ->
+                val p = Offset(size.width * i / (points.size - 1), size.height * y)
+                if (i == 0) path.moveTo(p.x,p.y) else path.lineTo(p.x,p.y)
+            }
+            drawPath(path, Brush.horizontalGradient(listOf(Violet, Pink)), style = androidx.compose.ui.graphics.drawscope.Stroke(width = 3.dp.toPx()))
+        }
+        Text("График появится после подключения сетевого движка", color = Muted, fontSize = 10.sp)
+    }
+}
+@Composable
+private fun BottomBar(selected: Int, onSelect: (Int) -> Unit, modifier: Modifier = Modifier) {
+    val items = listOf(Icons.Rounded.Home to "Главная", Icons.Rounded.Shield to "Защита", Icons.Rounded.Apps to "Приложения", Icons.Rounded.BarChart to "Аналитика")
+    Row(modifier.fillMaxWidth().background(Color(0xF20D0818)).border(1.dp, Violet.copy(alpha=.3f)).padding(vertical = 10.dp), horizontalArrangement = Arrangement.SpaceEvenly) {
+        items.forEachIndexed { index, pair ->
+            Column(Modifier.weight(1f).clickable { onSelect(index) }, horizontalAlignment = Alignment.CenterHorizontally) {
+                Icon(pair.first, null, tint = if (selected == index) Pink else Muted)
+                Text(pair.second, color = if (selected == index) Color.White else Muted, fontSize = 10.sp)
+            }
+        }
+    }
+}
