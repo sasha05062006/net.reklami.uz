@@ -15,7 +15,6 @@
                 <category android:name="android.intent.category.LAUNCHER" />
             </intent-filter>
         </activity>
-service>
         <receiver
             android:name=".BootReceiver"
             android:enabled="true"
