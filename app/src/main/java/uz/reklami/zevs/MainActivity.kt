@@ -36,6 +36,7 @@ import androidx.compose.ui.unit.sp
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
+import kotlinx.coroutines.delay
 
 private val Night = Color(0xFF080611)
 private val Panel = Color(0xFF171126)
@@ -98,6 +99,15 @@ fun ZevsApp() {
     var importedProfile by remember { mutableStateOf(if (savedProfile != null) "WireGuard-профиль" else null) }
     var profileValid by remember { mutableStateOf(savedProfile?.let { runCatching { WireGuardController.validate(it); true }.getOrDefault(false) } ?: false) }
     var selectedApps by remember { mutableStateOf(preferences.getStringSet("included_apps", emptySet())?.toSet() ?: emptySet()) }
+    var blockedCount by remember { mutableLongStateOf(FilterStore.blockedCount(context)) }
+    var queryCount by remember { mutableLongStateOf(FilterStore.queryCount(context)) }
+    LaunchedEffect(Unit) {
+        while (true) {
+            blockedCount = FilterStore.blockedCount(context)
+            queryCount = FilterStore.queryCount(context)
+            delay(1000)
+        }
+    }
     val installedApps = remember {
         context.packageManager.getInstalledApplications(0)
             .filter { (it.flags and android.content.pm.ApplicationInfo.FLAG_SYSTEM) == 0 && it.packageName != context.packageName }
@@ -193,7 +203,8 @@ fun ZevsApp() {
             ) {
                 item { Header() }
                 item { HeroPower(protection || wgConnected) { if (wgConnected) setWireGuard(false) else setProtection(it) } }
-                item { MetricsCard() }
+                item { MetricsCard(blockedCount, queryCount) }
+                item { FilterListsCard() }
                 item {
                     Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
                         FeatureToggle("Блокировка рекламы", if (wgConnected) "AdGuard DNS через VPN" else "DNS-фильтр без VPN", protection || wgConnected, { setProtection(it) }, Icons.Rounded.Shield, Modifier.weight(1f))
@@ -272,13 +283,13 @@ private fun HeroPower(enabled: Boolean, onToggle: (Boolean) -> Unit) {
 }
 
 @Composable
-private fun MetricsCard() {
+private fun MetricsCard(blockedCount: Long, queryCount: Long) {
     Row(Modifier.fillMaxWidth().clip(RoundedCornerShape(22.dp)).background(Panel).border(1.dp, Violet.copy(alpha=.25f), RoundedCornerShape(22.dp)).padding(vertical = 18.dp), horizontalArrangement = Arrangement.SpaceEvenly) {
-        Metric("0", "Заблокировано", Icons.Rounded.Shield)
+        Metric(blockedCount.toString(), "Заблокировано", Icons.Rounded.Shield)
         DividerLine()
-        Metric("0", "Приложений", Icons.Rounded.Apps)
+        Metric(queryCount.toString(), "DNS-запросов", Icons.Rounded.Apps)
         DividerLine()
-        Metric("0 МБ", "Сэкономлено", Icons.Rounded.Speed)
+        Metric("DNS", "Фильтрация", Icons.Rounded.Speed)
     }
 }
 @Composable private fun DividerLine() { Box(Modifier.width(1.dp).height(54.dp).background(Violet.copy(alpha=.35f))) }
@@ -309,6 +320,68 @@ private fun QuickCard(icon: androidx.compose.ui.graphics.vector.ImageVector, tit
         Column(Modifier.weight(1f)) { Text(title, fontWeight = FontWeight.Bold); Text(subtitle, color = Muted, fontSize = 11.sp) }
         Text(action, color = Cyan, fontSize = 11.sp)
         Icon(Icons.Rounded.ChevronRight, null, tint = Muted)
+    }
+}
+
+
+@Composable
+private fun FilterListsCard() {
+    val context = LocalContext.current
+    var denyInput by remember { mutableStateOf("") }
+    var allowInput by remember { mutableStateOf("") }
+    var denyDomains by remember { mutableStateOf(FilterStore.getDomains(context, "deny_domains").sorted()) }
+    var allowDomains by remember { mutableStateOf(FilterStore.getDomains(context, "allow_domains").sorted()) }
+    var message by remember { mutableStateOf<String?>(null) }
+
+    Column(
+        Modifier.fillMaxWidth().clip(RoundedCornerShape(20.dp)).background(Panel)
+            .border(1.dp, Violet.copy(alpha = .3f), RoundedCornerShape(20.dp)).padding(16.dp)
+    ) {
+        Text("Свои DNS-правила", fontWeight = FontWeight.Bold, fontSize = 16.sp)
+        Text("Разрешай или блокируй домены. Правила применяются в DNS-защите без VPN.", color = Muted, fontSize = 10.sp)
+        Spacer(Modifier.height(12.dp))
+        Text("Чёрный список", color = Pink, fontWeight = FontWeight.Bold, fontSize = 12.sp)
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            OutlinedTextField(value = denyInput, onValueChange = { denyInput = it }, modifier = Modifier.weight(1f), singleLine = true, placeholder = { Text("ads.example.com") })
+            IconButton(onClick = {
+                if (FilterStore.addDomain(context, "deny_domains", denyInput)) {
+                    denyDomains = FilterStore.getDomains(context, "deny_domains").sorted()
+                    denyInput = ""
+                    message = "Домен добавлен в блокировку"
+                } else message = "Проверь формат домена"
+            }) { Icon(Icons.Rounded.AddCircle, null, tint = Pink) }
+        }
+        denyDomains.forEach { domain ->
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Text(domain, color = Muted, fontSize = 11.sp, modifier = Modifier.weight(1f))
+                IconButton(onClick = {
+                    FilterStore.removeDomain(context, "deny_domains", domain)
+                    denyDomains = FilterStore.getDomains(context, "deny_domains").sorted()
+                }) { Icon(Icons.Rounded.Close, null, tint = Muted) }
+            }
+        }
+        Spacer(Modifier.height(8.dp))
+        Text("Белый список", color = Cyan, fontWeight = FontWeight.Bold, fontSize = 12.sp)
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            OutlinedTextField(value = allowInput, onValueChange = { allowInput = it }, modifier = Modifier.weight(1f), singleLine = true, placeholder = { Text("trusted.example.com") })
+            IconButton(onClick = {
+                if (FilterStore.addDomain(context, "allow_domains", allowInput)) {
+                    allowDomains = FilterStore.getDomains(context, "allow_domains").sorted()
+                    allowInput = ""
+                    message = "Домен добавлен в разрешения"
+                } else message = "Проверь формат домена"
+            }) { Icon(Icons.Rounded.AddCircle, null, tint = Cyan) }
+        }
+        allowDomains.forEach { domain ->
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Text(domain, color = Muted, fontSize = 11.sp, modifier = Modifier.weight(1f))
+                IconButton(onClick = {
+                    FilterStore.removeDomain(context, "allow_domains", domain)
+                    allowDomains = FilterStore.getDomains(context, "allow_domains").sorted()
+                }) { Icon(Icons.Rounded.Close, null, tint = Muted) }
+            }
+        }
+        message?.let { Text(it, color = Cyan, fontSize = 10.sp, modifier = Modifier.padding(top = 6.dp)) }
     }
 }
 
