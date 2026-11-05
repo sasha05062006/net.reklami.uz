@@ -15,6 +15,8 @@ import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
@@ -82,8 +84,17 @@ fun ZevsApp() {
         }
     }
     var tab by remember { mutableIntStateOf(0) }
-    var importedProfile by remember { mutableStateOf<String?>(null) }
-    var profileValid by remember { mutableStateOf(false) }
+    val preferences = remember { context.getSharedPreferences("zevs", android.content.Context.MODE_PRIVATE) }
+    val savedProfile = remember { preferences.getString("wg_profile", null) }
+    var importedProfile by remember { mutableStateOf(if (savedProfile != null) "WireGuard-профиль" else null) }
+    var profileValid by remember { mutableStateOf(savedProfile?.let { runCatching { WireGuardController.validate(it); true }.getOrDefault(false) } ?: false) }
+    var selectedApps by remember { mutableStateOf(preferences.getStringSet("included_apps", emptySet())?.toSet() ?: emptySet()) }
+    val installedApps = remember {
+        context.packageManager.getInstalledApplications(0)
+            .filter { (it.flags and android.content.pm.ApplicationInfo.FLAG_SYSTEM) == 0 && it.packageName != context.packageName }
+            .map { it.packageName to it.loadLabel(context.packageManager).toString() }
+            .sortedBy { it.second.lowercase() }
+    }
     val profilePicker = rememberLauncherForActivityResult(ActivityResultContracts.OpenDocument()) { uri ->
         if (uri != null) {
             runCatching {
@@ -120,7 +131,7 @@ fun ZevsApp() {
             wgBusy = true
             scope.launch {
                 val result = runCatching {
-                    withContext(Dispatchers.IO) { WireGuardController.connect(context, profile, true) }
+                    withContext(Dispatchers.IO) { WireGuardController.connect(context, profile, true, selectedApps) }
                 }
                 wgBusy = false
                 result.onSuccess {
@@ -169,6 +180,10 @@ fun ZevsApp() {
                 }
                 item { QuickCard(Icons.Rounded.FilterAlt, "Фильтры", "Списки рекламы и трекеров", "Настроить") { tab = 1 } }
                 item { QuickCard(Icons.Rounded.QueryStats, "Статистика", "Запросы и приложения", "Открыть") { tab = 2 } }
+                item { AppRoutingCard(installedApps, selectedApps) { packageName ->
+                    selectedApps = if (selectedApps.contains(packageName)) selectedApps - packageName else selectedApps + packageName
+                    preferences.edit().putStringSet("included_apps", selectedApps).apply()
+                } }
                 item { WireGuardProfileCard(importedProfile, profileValid, wgConnected, wgBusy, { profilePicker.launch(arrayOf("*/*")) }) { setWireGuard(!wgConnected) } }
                 item { TrafficCard() }
                 item {
@@ -274,6 +289,63 @@ private fun QuickCard(icon: androidx.compose.ui.graphics.vector.ImageVector, tit
         Icon(Icons.Rounded.ChevronRight, null, tint = Muted)
     }
 }
+
+@Composable
+private fun AppRoutingCard(
+    apps: List<Pair<String, String>>,
+    selected: Set<String>,
+    onToggle: (String) -> Unit
+) {
+    var showApps by remember { mutableStateOf(false) }
+    Column(
+        Modifier.fillMaxWidth().clip(RoundedCornerShape(20.dp))
+            .background(Panel).border(1.dp, Violet.copy(alpha = .3f), RoundedCornerShape(20.dp))
+            .padding(16.dp)
+    ) {
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            Icon(Icons.Rounded.Apps, null, tint = Cyan, modifier = Modifier.size(28.dp))
+            Spacer(Modifier.width(12.dp))
+            Column(Modifier.weight(1f)) {
+                Text("Маршрутизация приложений", fontWeight = FontWeight.Bold)
+                Text(
+                    if (selected.isEmpty()) "Все приложения через VPN, кроме Zevs"
+                    else "Через VPN: ${selected.size} · остальные напрямую",
+                    color = Muted, fontSize = 10.sp
+                )
+            }
+            TextButton(onClick = { showApps = true }) { Text("Выбрать") }
+        }
+    }
+    if (showApps) {
+        AlertDialog(
+            onDismissRequest = { showApps = false },
+            title = { Text("Приложения через VPN") },
+            text = {
+                Column(Modifier.heightIn(max = 420.dp).verticalScroll(rememberScrollState())) {
+                    Text(
+                        "Если ничего не выбрано — VPN используют все приложения, кроме Zevs. Если выбрать приложения — только они пойдут через VPN, остальные останутся напрямую.",
+                        color = Muted, fontSize = 11.sp, lineHeight = 16.sp
+                    )
+                    Spacer(Modifier.height(10.dp))
+                    apps.forEach { (packageName, label) ->
+                        Row(
+                            Modifier.fillMaxWidth().clickable { onToggle(packageName) }.padding(vertical = 5.dp),
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            Checkbox(checked = selected.contains(packageName), onCheckedChange = { onToggle(packageName) })
+                            Column(Modifier.weight(1f)) {
+                                Text(label, fontSize = 13.sp)
+                                Text(packageName, color = Muted, fontSize = 9.sp)
+                            }
+                        }
+                    }
+                }
+            },
+            confirmButton = { TextButton(onClick = { showApps = false }) { Text("Готово") } }
+        )
+    }
+}
+
 @Composable
 private fun WireGuardProfileCard(profileName: String?, valid: Boolean, connected: Boolean, busy: Boolean, onImport: () -> Unit, onConnect: () -> Unit) {
     Column(Modifier.fillMaxWidth().clip(RoundedCornerShape(22.dp))
