@@ -56,9 +56,7 @@ object WireGuardController {
         } else {
             "ExcludedApplications = $ownPackage"
         }
-        return withoutOldRules.replaceFirst(Regex("(?im)^\\s*\\[Interface\\]\\s*$")) {
-            "${it.value}\n$rule"
-        }
+        return withoutOldRules.replaceFirst(Regex("(?im)^\\s*\\[Interface\\]\\s*$"), "\$0\n$rule")
     }
 
     private fun withAdGuardDns(profile: String): String {
@@ -67,7 +65,7 @@ object WireGuardController {
         return if (pattern.containsMatchIn(profile)) {
             pattern.replace(profile, dns)
         } else {
-            profile.replaceFirst(Regex("(?im)^\\s*\\[Interface\\]\\s*$")) { "${it.value}\n$dns" }
+            profile.replaceFirst(Regex("(?im)^\\s*\\[Interface\\]\\s*$"), "\$0\n$dns")
         }
     }
 }
