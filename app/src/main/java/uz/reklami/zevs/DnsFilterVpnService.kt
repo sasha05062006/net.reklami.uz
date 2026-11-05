@@ -82,19 +82,10 @@ class DnsFilterVpnService : VpnService() {
         val dns = packet.copyOfRange(dnsStart, ihl + udpLength)
         if (dns.size < 17) return null
         val domain = readQuestionName(dns) ?: return null
-        val answer = if (isBlocked(domain)) blockedReply(dns) else queryDoh(dns) ?: blockedReply(dns, servfail = true)
+        val blocked = FilterStore.isBlocked(this, domain)
+        FilterStore.recordQuery(this, blocked)
+        val answer = if (blocked) blockedReply(dns) else queryDoh(dns) ?: blockedReply(dns, servfail = true)
         return buildIpv4UdpReply(packet, ihl, dnsStart, answer)
-    }
-
-    private fun isBlocked(domain: String): Boolean {
-        val d = domain.trimEnd('.').lowercase()
-        val blocked = listOf(
-            "doubleclick.net", "googlesyndication.com", "googleadservices.com",
-            "adservice.google.com", "adnxs.com", "app-measurement.com",
-            "facebook.net", "scorecardresearch.com", "adform.net",
-            "adsrvr.org", "taboola.com", "outbrain.com", "unityads.unity3d.com"
-        )
-        return blocked.any { d == it || d.endsWith(".$it") }
     }
 
     private fun queryDoh(query: ByteArray): ByteArray? {
