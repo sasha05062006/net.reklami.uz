@@ -1,6 +1,11 @@
 package uz.reklami.zevs
 
 import android.os.Bundle
+import android.content.Intent
+import android.widget.Toast
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.contract.ActivityResultContracts
+import androidx.compose.ui.platform.LocalContext
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.compose.foundation.Canvas
@@ -44,6 +49,30 @@ fun ZevsApp() {
     var protection by remember { mutableStateOf(false) }
     var vpn by remember { mutableStateOf(false) }
     var tab by remember { mutableIntStateOf(0) }
+    var importedProfile by remember { mutableStateOf<String?>(null) }
+    var profileValid by remember { mutableStateOf(false) }
+    val context = LocalContext.current
+    val profilePicker = rememberLauncherForActivityResult(ActivityResultContracts.OpenDocument()) { uri ->
+        if (uri != null) {
+            runCatching {
+                context.contentResolver.openInputStream(uri)?.bufferedReader()?.use { it.readText() }
+                    ?: error("Не удалось прочитать файл")
+            }.onSuccess { config ->
+                val valid = config.contains("[Interface]") &&
+                    config.contains("[Peer]") &&
+                    config.contains(Regex("(?m)^\\s*PrivateKey\\s*=")) &&
+                    config.contains(Regex("(?m)^\\s*PublicKey\\s*=")) &&
+                    config.contains(Regex("(?m)^\\s*Endpoint\\s*="))
+                profileValid = valid
+                importedProfile = if (valid) (uri.lastPathSegment?.substringAfterLast('/') ?: "WireGuard-профиль") else null
+                Toast.makeText(context, if (valid) "Конфигурация проверена. Туннель пока не активирован." else "Файл не похож на полный WireGuard-профиль.", Toast.LENGTH_LONG).show()
+            }.onFailure {
+                profileValid = false
+                importedProfile = null
+                Toast.makeText(context, "Не удалось прочитать конфигурацию.", Toast.LENGTH_LONG).show()
+            }
+        }
+    }
 
     MaterialTheme(colorScheme = darkColorScheme(
         background = Night, surface = Panel, primary = Violet,
@@ -68,7 +97,7 @@ fun ZevsApp() {
                 }
                 item { QuickCard(Icons.Rounded.FilterAlt, "Фильтры", "Списки рекламы и трекеров", "Настроить") { tab = 1 } }
                 item { QuickCard(Icons.Rounded.QueryStats, "Статистика", "Запросы и приложения", "Открыть") { tab = 2 } }
-                item { PolandCard(vpn) { vpn = it } }
+                item { WireGuardProfileCard(importedProfile, profileValid) { profilePicker.launch(arrayOf("*/*")) } }
                 item { TrafficCard() }
                 item {
                     Text(
@@ -174,20 +203,32 @@ private fun QuickCard(icon: androidx.compose.ui.graphics.vector.ImageVector, tit
     }
 }
 @Composable
-private fun PolandCard(connected: Boolean, onToggle: (Boolean) -> Unit) {
-    Column(Modifier.fillMaxWidth().clip(RoundedCornerShape(22.dp)).background(Brush.linearGradient(listOf(Color(0xFF251344), Panel))).border(1.dp, Violet.copy(alpha=.4f), RoundedCornerShape(22.dp)).padding(18.dp)) {
+private fun WireGuardProfileCard(profileName: String?, valid: Boolean, onImport: () -> Unit) {
+    Column(Modifier.fillMaxWidth().clip(RoundedCornerShape(22.dp))
+        .background(Brush.linearGradient(listOf(Color(0xFF251344), Panel)))
+        .border(1.dp, Violet.copy(alpha=.4f), RoundedCornerShape(22.dp)).padding(18.dp)) {
         Row(verticalAlignment = Alignment.CenterVertically) {
             Text("🇵🇱", fontSize = 30.sp)
             Spacer(Modifier.width(12.dp))
             Column(Modifier.weight(1f)) {
                 Text("VPN · Польша", fontWeight = FontWeight.Bold, fontSize = 16.sp)
-                Text(if (connected) "Выбран в интерфейсе · не подключён" else "Отключён", color = Muted, fontSize = 11.sp)
-            }
-            Button(onClick = { onToggle(!connected) }, colors = ButtonDefaults.buttonColors(containerColor = Violet), contentPadding = PaddingValues(horizontal = 14.dp, vertical = 8.dp)) {
-                Text(if (connected) "Снять выбор" else "Выбрать", fontSize = 11.sp)
+                Text(if (valid) "Профиль выбран · готов к подключению после интеграции" else "WireGuard · профиль не добавлен", color = Muted, fontSize = 10.sp)
             }
         }
-        Text("Реальный VPN-туннель появится после интеграции WireGuard и импорта конфигурации сервера.", color = Muted, fontSize = 10.sp, lineHeight = 15.sp, modifier = Modifier.padding(top = 12.dp))
+        Spacer(Modifier.height(12.dp))
+        if (valid && profileName != null) {
+            Text("Импортирован: $profileName", color = Cyan, fontSize = 11.sp)
+        } else {
+            Text("Добавь .conf-файл прямо с телефона. Компьютер не нужен. Подойдёт конфигурация WireGuard от VPN-провайдера.", color = Muted, fontSize = 11.sp, lineHeight = 16.sp)
+        }
+        Spacer(Modifier.height(12.dp))
+        Button(onClick = onImport, modifier = Modifier.fillMaxWidth(),
+            colors = ButtonDefaults.buttonColors(containerColor = Violet)) {
+            Icon(Icons.Rounded.FileOpen, null)
+            Spacer(Modifier.width(8.dp))
+            Text(if (valid) "Заменить конфигурацию" else "Импортировать WireGuard")
+        }
+        Text("Сейчас выполняется проверка формата файла. Реальное VPN-подключение будет включено после подключения сетевого движка.", color = Muted, fontSize = 9.sp, lineHeight = 14.sp, modifier = Modifier.padding(top = 8.dp))
     }
 }
 @Composable
