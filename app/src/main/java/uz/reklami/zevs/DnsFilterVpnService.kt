@@ -105,6 +105,7 @@ class DnsFilterVpnService : VpnService() {
             var socket: SSLSocket? = null
             try {
                 socket = SSLSocketFactory.getDefault().createSocket() as SSLSocket
+                if (!protect(socket)) throw IllegalStateException("Unable to protect DNS-over-TLS socket from VPN routing")
                 socket.connect(InetSocketAddress(ip, 853), 5000)
                 val params = socket.sslParameters
                 params.serverNames = listOf(SNIHostName(host))
