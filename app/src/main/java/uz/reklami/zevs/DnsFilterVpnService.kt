@@ -99,7 +99,6 @@ class DnsFilterVpnService : VpnService() {
         var connection: HttpURLConnection? = null
         return try {
             connection = URL("https://1.1.1.1/dns-query").openConnection() as HttpURLConnection
-            if (!protect(connectionSocketUnsupported())) { /* protect is applied through DNS-over-HTTPS platform routing below */ }
             connection.requestMethod = "POST"
             connection.connectTimeout = 7000
             connection.readTimeout = 7000
@@ -114,10 +113,6 @@ class DnsFilterVpnService : VpnService() {
             connection?.disconnect()
         }
     }
-
-    // HttpURLConnection uses the platform network and the DNS-only VPN has no default route,
-    // so the HTTPS request goes out through the device's normal network.
-    private fun connectionSocketUnsupported() = java.net.Socket()
 
     private fun readQuestionName(dns: ByteArray): String? {
         if (dns.size < 17) return null
