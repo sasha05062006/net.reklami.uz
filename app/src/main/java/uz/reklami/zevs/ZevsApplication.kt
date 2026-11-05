@@ -8,7 +8,7 @@ class ZevsApplication : Application() {
         super.onCreate()
         GoBackend.setAlwaysOnCallback {
             Thread {
-                runCatching { WireGuardController.connectSaved(applicationContext) }
+                runCatching { WireGuardController.connectSaved(applicationContext, force = true) }
             }.start()
         }
     }
