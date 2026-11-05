@@ -24,8 +24,9 @@ object WireGuardController {
 
     @Synchronized
     @Throws(Exception::class)
-    fun connect(context: Context, profile: String, adBlocking: Boolean) {
-        val configured = if (adBlocking) withAdGuardDns(profile) else profile
+    fun connect(context: Context, profile: String, adBlocking: Boolean, includedApps: Set<String> = emptySet()) {
+        val dnsConfigured = if (adBlocking) withAdGuardDns(profile) else profile
+        val configured = withAppRouting(dnsConfigured, includedApps, context.packageName)
         val parsed = Config.parse(ByteArrayInputStream(configured.toByteArray(Charsets.UTF_8)))
         require(parsed.peers.isNotEmpty()) { "В профиле нет WireGuard-сервера" }
         val engine = backend ?: GoBackend(context.applicationContext).also { backend = it }
@@ -42,6 +43,22 @@ object WireGuardController {
         val engine = backend ?: return
         val tunnel = activeTunnel ?: return
         engine.setState(tunnel, Tunnel.State.DOWN, null)
+    }
+
+
+    private fun withAppRouting(profile: String, includedApps: Set<String>, ownPackage: String): String {
+        val withoutOldRules = profile.replace(
+            Regex("(?im)^\\s*(IncludedApplications|ExcludedApplications)\\s*=.*(?:\\r?\\n|$)"),
+            ""
+        )
+        val rule = if (includedApps.isNotEmpty()) {
+            "IncludedApplications = ${includedApps.sorted().joinToString(",")}"
+        } else {
+            "ExcludedApplications = $ownPackage"
+        }
+        return withoutOldRules.replaceFirst(Regex("(?im)^\\s*\\[Interface\\]\\s*$")) {
+            "${it.value}\n$rule"
+        }
     }
 
     private fun withAdGuardDns(profile: String): String {
